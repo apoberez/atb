@@ -8,6 +8,16 @@ from model import Document, Shop, Invoice
 # @todo: test coverage
 
 
+def scan_price(text: str):
+    """
+    Scan price from string, before scanning removes whitespaces
+    to avoid issues with floating point values returns price in cents
+    """
+    text = re.sub('\s', '', text)
+    text = text.replace(',', '.')
+    return int(round(float(text)*100))
+
+
 class ScanError(Exception):
     """Base class for exceptions in this module."""
     pass
@@ -54,7 +64,7 @@ class ContractorScanner:
 
         # scan sum
         try:
-            total = int(float(re.sub('\s', '', row[3].replace(',', '.'))) * 100)
+            total = scan_price(row[3])
         except ValueError:
             ContractorScanner.raise_scan_error(row_id, 'Неверный формат сумы %s' % row[3])
             return None
@@ -134,7 +144,7 @@ class AtbScanner:
 
         # scan value
         try:
-            total = int(float(row_data['total'].replace(',', '.')) * 100)
+            total = scan_price(row_data['total'])
         except ValueError:
             ContractorScanner.raise_scan_error(row_id, 'Неверный формат сумы %s' % row_data['total'])
             return None

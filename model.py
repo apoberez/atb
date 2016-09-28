@@ -9,6 +9,12 @@ class Invoice:
         self.date = date
         self.id = uid
 
+    def get_formatted_date(self) -> str:
+        return self.date.strftime('%d.%m.%Y')
+
+    def get_formatted_total(self) -> str:
+        return '{:.2f}'.format(self.total / 100.0).replace('.', ',')
+
     def __str__(self):
         return 'date: %s, num: %d, total: %d\n' % (self.date, self.invoice_num, self.total)
 
