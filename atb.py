@@ -168,9 +168,11 @@ def save_diff(difference: list, doc_pass: str):
 
 if __name__ == '__main__':
     # todo: handle possible scanning errors
+    # атб
     atb = AtbScanner.scan('documents/atb.csv')
-    contractor = ContractorScanner.scan('documents/contractor.csv')
+    # поставщик
+    contractor = ContractorScanner.scan('documents/postavshik.csv')
     diff = get_difference(atb, contractor)
-    save_diff(diff, 'documents/diff.csv')
+    save_diff(diff, 'documents/расхождения.csv')
 
     print('OK')

@@ -5,6 +5,7 @@ import re
 from model import Document, Shop, Invoice
 
 # @todo: handle all possible errors while scanning
+# @todo: handle different localisations in dates and prices
 # @todo: test coverage
 
 
@@ -70,8 +71,9 @@ class ContractorScanner:
             return None
 
         # scan invoice number
-        if row[2] != '':
-            invoice_num = int(re.sub('[^\d]', '', row[2]))
+        number_string = re.sub('[^\d]', '', row[2])
+        if number_string != '':
+            invoice_num = int(number_string)
         else:
             invoice_num = 0
 
@@ -139,7 +141,7 @@ class AtbScanner:
         try:
             date = datetime.datetime.strptime(row_data['date'], '%d.%m.%Y').date()
         except ValueError:
-            ContractorScanner.raise_scan_error(row_id, 'Неверный формат даты %s' % row_data['date'])
+            AtbScanner.raise_scan_error(row_id, 'Неверный формат даты %s' % row_data['date'])
             return None
 
         # scan value
