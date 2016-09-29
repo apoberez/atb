@@ -18,7 +18,7 @@ def get_difference(atb_doc: Document, contractor_doc: Document) -> list:
         contractor_invoices = contractor_shop.invoices[:]
 
         filter_contractor_invoices(contractor_invoices)
-        filter_storno(atb_invoices)
+        filter_atb_invoices(atb_invoices)
         filter_equivalent_invoices(atb_invoices, contractor_invoices)
         difference += get_shop_difference(atb_invoices, contractor_invoices, contractor_shop.num)
 
@@ -96,6 +96,7 @@ def filter_contractor_invoices(contractor_invoices: list):
     """
     In contractor document invoice can have child invoice
     we should union such invoices before computing difference
+    if computed total equals 0 remove such invoices
     """
     for invoice in contractor_invoices[:]:
         if invoice.total < 0:
@@ -108,6 +109,8 @@ def filter_contractor_invoices(contractor_invoices: list):
                         contractor_invoices.remove(invoice)
                         # todo: maybe add compound total field in Invoice and move this logic to scanner
                         r_invoice.total += invoice.total
+                        if r_invoice.total == 0:
+                            contractor_invoices.remove(r_invoice)
                         break
 
 
@@ -123,22 +126,25 @@ def is_same_invoice(contractor_invoice: Invoice, atb_invoice: Invoice) -> bool:
            and contractor_invoice.total == atb_invoice.total
 
 
-def filter_storno(atb_invoices: list):
+def filter_atb_invoices(invoices: list):
     """
     When there are invoices with same data and only
     total positive and negative so invoices cancel each other
     such record are called "storno"
     storno should be removed from diff computing process
+    If invoice total = 0 such invoice is technical and should be ignored
     """
-    atb_invoices_copy = atb_invoices[:]
-    for invoice in atb_invoices_copy:
-        for comp_invoice in atb_invoices_copy:
-            if (invoice.invoice_num == comp_invoice.invoice_num or invoice.date == comp_invoice.date) \
-                    and invoice.total < 0 \
-                    and (invoice.total + comp_invoice.total) == 0:
-                atb_invoices.remove(invoice)
-                atb_invoices.remove(comp_invoice)
-                break
+    for invoice in invoices[:]:
+        if invoice.total == 0:
+            invoices.remove(invoice)
+            continue
+        if invoice.total < 0:
+            for comp_invoice in invoices[:]:
+                if (invoice.invoice_num == comp_invoice.invoice_num or invoice.date == comp_invoice.date) \
+                        and (invoice.total + comp_invoice.total) == 0:
+                    invoices.remove(invoice)
+                    invoices.remove(comp_invoice)
+                    break
 
 
 def save_diff(difference: list, doc_pass: str):
