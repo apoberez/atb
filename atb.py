@@ -14,7 +14,11 @@ def get_difference(atb_doc: Document, contractor_doc: Document) -> list:
 
     for contractor_shop in contractor_doc.shops:
         atb_shop = atb_doc.get_shop(contractor_shop.num)
-        atb_invoices = atb_shop.invoices[:]
+        if atb_shop is None:
+            atb_invoices = []
+        else:
+            atb_invoices = atb_shop.invoices[:]
+
         contractor_invoices = contractor_shop.invoices[:]
 
         filter_contractor_invoices(contractor_invoices)
