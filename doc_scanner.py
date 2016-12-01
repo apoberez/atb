@@ -152,7 +152,11 @@ class AtbScanner:
             return None
 
         # scan invoice number
-        invoice_num = int(re.sub('[^\d]', '', row_data['invoice_num'].split('|')[0]))
+        try:
+            invoice_num = int(re.sub('[^\d]', '', row_data['invoice_num'].split('|')[0]))
+        except:
+            # if invoice number is invalid (in rare cases can be *) then set  1 such number wil be present in diff
+            invoice_num = 1
 
         return Invoice(date, 1, invoice_num, total, row_id)
 
