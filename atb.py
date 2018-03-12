@@ -1,8 +1,207 @@
 import csv
+import datetime
 import re
 
-from doc_scanner import ContractorScanner, AtbScanner
-from model import Document, Invoice
+
+class Invoice:
+    def __init__(self, date: datetime, invoice_type: int, invoice_num: int, total: int, uid: int):
+        self.total = total
+        self.invoice_num = invoice_num
+        self.invoice_type = invoice_type
+        self.date = date
+        self.id = uid
+
+    def get_formatted_date(self) -> str:
+        return self.date.strftime('%d.%m.%Y')
+
+    def get_formatted_total(self) -> str:
+        return '{:.2f}'.format(self.total / 100.0).replace('.', ',')
+
+    def __str__(self):
+        return 'date: %s, num: %d, total: %d\n' % (self.date, self.invoice_num, self.total)
+
+    def __repr__(self):
+        return '\n id: %d date: %s, num: %d, total: %d' % (self.id, self.date, self.invoice_num, self.total)
+
+
+class Shop:
+    def __init__(self, num: int):
+        self.num = num
+        self.invoices = []
+
+    def add_invoice(self, invoice: Invoice):
+        self.invoices.append(invoice)
+
+
+class Document:
+    def __init__(self, name: str):
+        self.shops = []
+        self.name = name
+
+    def get_shop(self, num: int) -> Shop:
+        for shop in self.shops:
+            if num == shop.num:
+                return shop
+
+
+def scan_price(text: str):
+    """
+    Scan price from string, before scanning removes whitespaces
+    to avoid issues with floating point values returns price in cents
+    """
+    text = re.sub('\s', '', text)
+    text = text.replace(',', '.')
+    return int(round(float(text)*100))
+
+
+class ScanError(Exception):
+    """Base class for exceptions in this module."""
+    pass
+
+
+class ContractorScanner:
+    """
+    Scanner for csv file of invoices from contractor
+    """
+
+    @staticmethod
+    def scan(source: str) -> Document:
+        csv_file = open(source)
+        reader = csv.reader(csv_file)
+        shop = Shop(0)
+        doc = Document('поставщик')
+        for i, row in enumerate(reader):
+            if i == 0:
+                continue
+            if row[1] == '' and row[2] == '':
+                shop = Shop(ContractorScanner._scan_shop_number(row[0], i))
+                doc.shops.append(shop)
+            else:
+                shop.add_invoice(ContractorScanner.scan_invoice(row, i))
+
+        return doc
+
+    @staticmethod
+    def raise_scan_error(row: int, message: str):
+        message = 'Ошибка в документе поставщика строка %d\n%s' % (row, message)
+        raise ScanError(message)
+
+    @staticmethod
+    def scan_invoice(row: list, row_id: int) -> Invoice:
+        """
+        Scan invoice data from document row
+        """
+        # scan date
+        try:
+            date = datetime.datetime.strptime(row[0], '%d.%m.%y').date()
+        except ValueError:
+            ContractorScanner.raise_scan_error(row_id, 'Неверный формат даты %s' % row[0])
+            return None
+
+        # scan sum
+        try:
+            total = scan_price(row[3])
+        except ValueError:
+            ContractorScanner.raise_scan_error(row_id, 'Неверный формат сумы %s' % row[3])
+            return None
+
+        # scan invoice number
+        number_string = re.sub('[^\d]', '', row[2])
+        if number_string != '':
+            invoice_num = int(number_string)
+        else:
+            invoice_num = 0
+
+        return Invoice(date, row[1], invoice_num, total, row_id)
+
+    @staticmethod
+    def _scan_shop_number(string: str, row: int) -> int:
+        matches = re.findall('№(?:\s+)?\d+', string)
+        if len(matches) < 1:
+            # todo: log for future check
+            ContractorScanner.raise_scan_error(row, 'Не могу получить номер магазина со строки: %s' % string)
+        return int(re.sub('[^\d]', '', matches[0]))
+
+
+class AtbScanner:
+    """
+    Scanner for csv document of invoices from ATB
+    """
+
+    @staticmethod
+    def scan(source: str) -> Document:
+        csv_file = open(source)
+        reader = csv.reader(csv_file)
+        doc = Document('АТБ')
+        header = []
+        for i, row in enumerate(reader):
+            if i == 0:
+                header = row
+                continue
+            else:
+                shop_number = AtbScanner._scan_shop_number(row[header.index('[ ]')], i)
+                shop = doc.get_shop(shop_number)
+                if shop is None:
+                    shop = Shop(shop_number)
+                    doc.shops.append(shop)
+
+                date_col = row[header.index('Внутренняя дата записи')]
+                if '' == date_col:
+                    date_col = row[header.index('Дата счета-фактуры')]
+
+                number_col = row[header.index('Внутренний порядковый номер')]
+                if '' == number_col:
+                    number_col = row[header.index('№ счета-фактуры')]
+
+                row_data = {
+                    'date': date_col,
+                    'total': row[header.index('Сумма по сч.-фактуре')],
+                    'invoice_num': number_col
+                }
+                shop.add_invoice(AtbScanner.scan_invoice(row_data, i))
+
+        return doc
+
+    @staticmethod
+    def raise_scan_error(row: int, message: str):
+        message = 'Ошибка в документе АТБ строка %d\n%s' % (row, message)
+        raise ScanError(message)
+
+    @staticmethod
+    def scan_invoice(row_data: dict, row_id: int) -> Invoice:
+        """
+        Scan invoice data from document row
+        """
+        # scan date
+        try:
+            date = datetime.datetime.strptime(row_data['date'], '%d.%m.%Y').date()
+        except ValueError:
+            AtbScanner.raise_scan_error(row_id, 'Неверный формат даты %s' % row_data['date'])
+            return None
+
+        # scan value
+        try:
+            total = scan_price(row_data['total'])
+        except ValueError:
+            ContractorScanner.raise_scan_error(row_id, 'Неверный формат сумы %s' % row_data['total'])
+            return None
+
+        # scan invoice number
+        try:
+            invoice_num = int(re.sub('[^\d]', '', row_data['invoice_num'].split('|')[0]))
+        except:
+            # if invoice number is invalid (in rare cases can be *) then set  1 such number wil be present in diff
+            invoice_num = 1
+
+        return Invoice(date, 1, invoice_num, total, row_id)
+
+    @staticmethod
+    def _scan_shop_number(string: str, row: int) -> int:
+        try:
+            string = string[-6:]
+            return int(re.sub('[^\d]', '', string))
+        except ValueError:
+            ContractorScanner.raise_scan_error(row, 'Не могу получить номер магазина со строки: %s' % string)
 
 
 def get_difference(atb_doc: Document, contractor_doc: Document) -> list:
