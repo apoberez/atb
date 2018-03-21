@@ -139,7 +139,10 @@ class AtbScanner:
                 header = row
                 continue
             else:
-                shop_number = AtbScanner._scan_shop_number(row[header.index('[ ]')], i)
+                sn = row[header.index('[ ]')]
+                if sn == '':
+                    continue
+                shop_number = AtbScanner._scan_shop_number(sn, i)
                 shop = doc.get_shop(shop_number)
                 if shop is None:
                     shop = Shop(shop_number)
